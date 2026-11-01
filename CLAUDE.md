@@ -98,6 +98,7 @@ One base service (`acestream-engine`) and two profile services that `extends:` i
 
 - `ram` → adds a tmpfs mount of `/root/.ACEStream/.acestream_cache` (Linux/WSL2 only).
 - `memory` → overrides only `ACESTREAM_EXTRA_FLAGS=--live-cache-type memory` (`extends` merges `environment` by key; verify with `docker compose --profile memory config`).
+- **`memory` breaks the web player as far as measured** (2026-11-01, Apple Silicon running the amd64 image under emulation): with the flag the live playlist collapses to `#EXT-X-TARGETDURATION:1` with a single sub-second segment and `GET /ace/c/<infohash>/<n>.ts` never answers (15 s timeout), so the browser sits in its reconnect loop; without it the same content_id serves `TARGETDURATION:6` and a 5.4 MB segment in 3.0 s. `tests/test-features.bat` cannot catch this — it only waits for `healthy`, and the `get_version` healthcheck says nothing about segment delivery. The `ram` profile (tmpfs *under* the disk-cache path) was not tested. Re-check on a native x86_64 host before treating it as an upstream defect rather than an emulation artefact.
 
 The base service reads `ACESTREAM_IMAGE`, `HTTP_PORT`, `HTTPS_PORT` and `ACESTREAM_EXTRA_FLAGS` from the environment / `.env` (see `.env.example`), with `restart: unless-stopped` and json-file log rotation (10m × 3). No `version:` key; no duplicated `healthcheck:` in compose — the Dockerfile HEALTHCHECK is the single source of truth.
 
