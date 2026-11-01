@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!--
         Locked down for an offline/LAN deployment: everything the page needs
-        (video.js, its Spanish language pack, styles and app code) is vendored
+        (video.js, its Spanish and Chinese language packs, styles and app code) is vendored
         under /webui/, so default-src 'self' is enough. media-src/worker-src
         need blob: because the bundled HLS tech (VHS) demuxes segments into a
         MediaSource via blob: URLs and a Worker created from a Blob.
@@ -94,6 +94,17 @@
                             <path d="M30,0 v30 M0,15 h60" stroke="#cf142b" stroke-width="6" />
                         </svg>
                     </button>
+                    <button class="lang-button" type="button" data-lang="zh-CN" aria-label="简体中文"
+                        aria-pressed="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20" aria-hidden="true">
+                            <rect width="30" height="20" fill="#de2910" />
+                            <polygon fill="#ffde00" points="5,2 7.85,4.07 6.76,7.43 3.24,7.43 2.15,4.07" />
+                            <polygon fill="#ffde00" points="9.14,2.51 9.25,1.34 10.39,1.08 11,2.09 10.22,2.97" />
+                            <polygon fill="#ffde00" points="11.01,4.14 11.56,3.1 12.72,3.3 12.88,4.47 11.83,4.99" />
+                            <polygon fill="#ffde00" points="11.04,6.73 11.96,6 12.94,6.66 12.62,7.79 11.44,7.83" />
+                            <polygon fill="#ffde00" points="9.22,8.38 10.35,8.06 11,9.05 10.26,9.96 9.16,9.55" />
+                        </svg>
+                    </button>
                     <button class="lang-button" type="button" data-lang="es" aria-label="Español"
                         aria-pressed="false">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 500" aria-hidden="true">
@@ -121,6 +132,8 @@
         integrity="sha384-9LtdENn4aCK5YUSBEw9zQT/tT1eCah4K4BlWimkvqqCaURKD4rBN00ZHMe26ny2O"></script>
     <script src="/webui/vendor/videojs/lang/es.js"
         integrity="sha384-ViN9R5ud+/LHMucsPJ9unPOj2wfc2yh9wJsuHQYptkx9iiM4hmLo1CZVJSbPcEvj"></script>
+    <script src="/webui/vendor/videojs/lang/zh-CN.js"
+        integrity="sha384-xhE8eDMiQOwrXWCRRvUntdUzcu/PPkzMpNaGZTGBC/DLxubQnohLQyv2HReComsu"></script>
     <script src="/webui/html/player.js"></script>
 </body>
 

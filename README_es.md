@@ -11,6 +11,8 @@ Ejecuta Acestream Engine 3.2.11 dentro de Docker y mira streams desde el navegad
 ## Novedades de v8.3.2
 
 - **Reproductor en móviles**: el botón de mostrar/ocultar ya no tapa el panel, el botón grande de reproducción queda libre y todos los controles tienen un área táctil de 44 px.
+- **Reproductor en chino (简体中文)**: un tercer botón de bandera, textos `zh-CN` para todos los mensajes y controles de video.js en chino (el paquete de idioma también va incluido en la imagen, así que sigue sin usarse CDN). Se detecta cualquier idioma `zh*` del navegador y la elección explícita se sigue recordando.
+- **El reproductor se reconecta solo**: cuando el motor descarta la descarga en vivo — el típico tropiezo del P2P —, la página se quedaba preguntando a la dirección `/ace/m/...` muerta hasta que pulsabas F5. Ahora vuelve a entrar por el punto de acceso `content_id` con reintentos de 1 a 15 s y un contador "reconectando (n/5)" en pantalla, y un vigilante del progreso detecta además los cortes en los que video.js no lanza ningún error.
 
 ### v8.3.1
 

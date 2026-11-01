@@ -11,6 +11,8 @@ Run the Acestream Engine 3.2.11 inside Docker and watch streams from your browse
 ## What's new in v8.3.2
 
 - **Player on phones**: the show/hide button no longer covers the panel, the big play button stays clear of it, and every control has a 44 px touch target.
+- **Chinese player UI (简体中文)**: a third flag button, `zh-CN` wording for every message and Chinese video.js controls (the language pack is vendored too, so still no CDN). Any `zh*` browser locale is detected, and an explicit choice is still remembered.
+- **The player reconnects by itself**: when the engine drops the live download — the usual P2P hiccup — the page used to keep polling the dead `/ace/m/...` address until you pressed F5. It now re-enters through the `content_id` endpoint with a 1→15 s backoff and an on-screen "reconnecting (n/5)" counter, and a playback-progress watchdog also catches the stalls where video.js never reports an error at all.
 
 ### v8.3.1
 
