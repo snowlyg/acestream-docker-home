@@ -343,7 +343,10 @@ input:focus-visible {
 
 #attribution {
     position: absolute;
-    bottom: 0;
+    /* Clear of the control bar: .vjs-control-bar is 3em tall and .video-js pins its
+       font-size at 10px, so the bar is exactly 30px. At bottom:0 this 44px hit area
+       sat on top of the fullscreen button (40x30, same corner) and swallowed clicks. */
+    bottom: 34px;
     right: 0;
     z-index: 50;
     opacity: 0.4;
