@@ -349,12 +349,26 @@ input:focus-visible {
     bottom: 34px;
     right: 0;
     z-index: 50;
-    opacity: 0.4;
+    /* Out of the way while the viewer is interacting; video.js toggles
+       vjs-user-active / vjs-user-inactive on its own idle timer. pointer-events
+       has to go with the opacity, or an invisible icon would still eat the click
+       meant for play/pause. */
+    opacity: 0;
+    pointer-events: none;
     transition: opacity 0.3s ease;
 }
 
-#attribution:hover {
+/* Reveal once the pointer has been still for a moment... */
+.video-js.vjs-user-inactive ~ #attribution {
+    opacity: 0.4;
+    pointer-events: auto;
+}
+
+/* ...and the instant the pointer reaches it, so it stays easy to click.
+   Same specificity as the rule above and declared later, so hover wins. */
+.video-js ~ #attribution:hover {
     opacity: 1;
+    pointer-events: auto;
 }
 
 /* 44x44 touch target around the 22px icon */
