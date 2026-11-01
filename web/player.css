@@ -56,6 +56,12 @@ input:focus-visible {
     height: 100% !important;
 }
 
+/* The player box is the whole viewport, so on any window wider than 16:9 the
+   picture would be stretched: video.js leaves object-fit at its initial "fill". */
+.video-js .vjs-tech {
+    object-fit: contain;
+}
+
 .vjs-big-play-button {
     border-radius: 50%;
     background-color: rgba(43, 51, 63, 0.7) !important;

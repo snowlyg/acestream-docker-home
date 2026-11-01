@@ -135,7 +135,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- INITIALIZATION ---
         init() {
-            this.elements.player = videojs("video", { fluid: true });
+            // `fill` (not `fluid`): the player already fills #player-container via
+            // CSS, and fluid's padding-top would fight that and stretch the picture.
+            this.elements.player = videojs("video", { fill: true });
             this.addEventListeners();
             this.startStallWatch();
             this.changeLanguage(this.detectLanguage());
