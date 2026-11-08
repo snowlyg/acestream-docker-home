@@ -43,9 +43,11 @@ the input panel.
 ## Run as a container (starts with the stack, no manual step)
 
 Instead of `run.sh`, the sidecar can run as a companion container next to the
-engine so it comes up (and auto-restarts) with `docker compose up -d`. The image
-is multi-arch (`python:3.11-slim`), so on Apple Silicon it runs **native arm64**
-and stays fast — do not add `platform: linux/amd64` to it. Add to your compose:
+engine so it comes up (and auto-restarts) with `docker compose up -d`. The base
+(`python:3.10`) runs **native arm64** on Apple Silicon and stays fast — do not add
+`platform: linux/amd64` to it. The Dockerfile uses a locally-cached base plus
+mainland apt (aliyun) / pip (tuna) mirrors, because public China Docker Hub
+mirrors are currently login-gated or rate-limited. Add to your compose:
 
 ```yaml
   subs:
@@ -71,6 +73,37 @@ volumes:
 container). The model downloads once into the `subs-models` volume on first
 start. Because the sidecar is always up, the player auto-enables subtitles on
 first play; you never run anything by hand.
+
+The image sets `HF_ENDPOINT=https://hf-mirror.com` and `HF_HUB_DISABLE_XET=1` so
+the one-time model download works on China networks: huggingface.co stalls there,
+and huggingface_hub 2.x's default Xet CAS path bypasses `HF_ENDPOINT` and stalls
+at 0 B/s even with the mirror set — disabling Xet forces the plain HTTP route.
+hf-mirror.com is a full mirror that works globally; override `HF_ENDPOINT` (or
+unset it) if you have direct access or a different mirror.
+
+### Faster first download (throttled networks)
+
+The in-container fetch is single-stream and is often throttled hard (measured
+~0.3 MB/s here), so the 461 MB `small` model can take 20+ min. A multi-connection
+downloader is far faster — `aria2c -x16` through a local proxy hit ~20 MB/s on the
+same network. To pre-seed the cache so the sidecar starts instantly:
+
+```bash
+# 1. fetch model.bin (add --all-proxy=http://127.0.0.1:7897 if you use a proxy)
+aria2c -x16 -s16 -k1M -o model.bin \
+  https://hf-mirror.com/Systran/faster-whisper-small/resolve/main/model.bin
+# 2. the file's sha256 IS its HF-cache blob name
+sha256sum model.bin
+# 3. copy it into the subs-models volume as
+#      hub/models--Systran--faster-whisper-small/blobs/<sha256>
+#    and symlink it from the snapshot (commit = contents of refs/main):
+#      hub/.../snapshots/<commit>/model.bin -> ../../blobs/<sha256>
+#    config.json / tokenizer.json / vocabulary.txt are small and download fine
+#    on their own on first start.
+```
+
+With the blob in place, `--model small` resolves entirely from cache and
+`/health` reports `ready` in ~10 s.
 
 ## How it works
 
