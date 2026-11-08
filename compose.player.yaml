@@ -1,0 +1,41 @@
+# Personal deployment of the fork (loopback-only, local images, persistent
+# volumes). Kept separate from docker-compose.yml so plain `docker compose up`
+# still uses the upstream-style default. The zh-CN/en/es player with reconnect
+# and the ASR subtitle sidecar are baked into / built from this repo.
+#   build: docker build --platform linux/amd64 -t acestream-engine:latest .
+#   run:   docker compose -f compose.player.yaml -p acestream-player up -d
+#          ->  http://127.0.0.1:6878/webui/player/
+services:
+  acestream:
+    image: acestream-engine:latest    # local build; smarquezp/docker-acestream-ubuntu-home is the published one
+    container_name: acestream
+    restart: unless-stopped
+    platform: linux/amd64             # upstream ships no arm64 build; runs under Rosetta here
+    ports:
+      - "127.0.0.1:6878:6878"         # the web UI has no auth: keep it loopback-only
+    volumes:
+      - acestream-data:/root/.ACEStream
+
+  # Local ASR subtitle sidecar. Native arm64 (no platform override) so it is fast
+  # on Apple Silicon, unlike the emulated amd64 engine above. Starts with the
+  # stack and auto-restarts; the player enables it automatically on first play.
+  subs:
+    build:
+      context: ./subs
+    image: acestream-subs:latest
+    container_name: acestream-subs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"        # loopback-only, same as the web UI
+    command: ["--engine", "http://acestream:6878", "--model", "small"]
+    volumes:
+      - subs-models:/root/.cache/huggingface   # persist downloaded model weights
+    depends_on:
+      - acestream
+
+volumes:
+  acestream-data:
+    name: acestream-data   # the volume created by the original `docker run`
+    external: true
+  subs-models:
+    name: subs-models

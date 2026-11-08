@@ -8,7 +8,11 @@
 
 Run the Acestream Engine 3.2.11 inside Docker and watch streams from your browser. On Windows, one script does everything: it starts Docker, pulls the image, runs the engine and opens the web player.
 
-## What's new in v8.3.2
+## What's new in v8.4.0
+
+- **Live English subtitles from a local model**: a new **CC** button generates subtitles on your own machine with faster-whisper — no cloud, no account. A native host sidecar (`subs/run.sh`) transcribes the stream audio and translates it to English, and the player renders it as a normal subtitle track (works in fullscreen). It runs outside the container so it stays fast on Apple Silicon. Subtitles lag the picture by a few seconds. See [subs/README.md](subs/README.md).
+
+### v8.3.2
 
 - **Player on phones**: the show/hide button no longer covers the panel, the big play button stays clear of it, and every control has a 44 px touch target.
 - **Chinese player UI (简体中文)**: a third flag button, `zh-CN` wording for every message and Chinese video.js controls (the language pack is vendored too, so still no CDN). Any `zh*` browser locale is detected, and an explicit choice is still remembered.
@@ -58,6 +62,10 @@ Set the environment variable `ACESTREAM_IMAGE` to deploy a different image (for 
 Paste an `acestream://...` link or the bare 40-character content ID into the player and press **Play**. It can take 10-30 seconds to connect to peers.
 
 Links can be shared or bookmarked: `http://localhost:6878/webui/player/?id=<content id>`.
+
+### Live subtitles (local ASR)
+
+Press the **CC** button (top right) to overlay live English subtitles generated on your machine. Start the sidecar first (`cd subs && ./run.sh`; needs `ffmpeg` and Python 3.10-3.12), then enable CC while a stream plays. It uses a local faster-whisper model — no cloud, no account. Details and model sizes: [subs/README.md](subs/README.md).
 
 ### From other devices (TV, phone, tablet)
 
@@ -115,6 +123,7 @@ Or open `http://<HOST>:<PORT>/webui/api/service?method=get_version`.
 - [docs/BUILD.md](docs/BUILD.md): how the image is built, dependencies and design constraints
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): startup flow and design decisions
 - [docs/TESTING.md](docs/TESTING.md): smoke tests and CI
+- [subs/README.md](subs/README.md): local ASR live subtitles (English)
 
 ## License
 

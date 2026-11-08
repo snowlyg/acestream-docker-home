@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const LANG_STORAGE_KEY = 'ace-player-lang';
+    const SUBS_URL_STORAGE_KEY = 'ace-player-subs-url';
 
     const app = {
         // --- CONFIGURATION ---
@@ -15,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // video.js ever firing 'error', so playback progress itself is watched.
         STALL_CHECK_MS: 4000,
         STALL_LIMIT_MS: 12000,
+        // Local ASR subtitle sidecar (subs/run.sh). The CSP only opens this port.
+        SUBS_PORT: 8765,
+        SUBS_POLL_MS: 1500,
 
         // --- STATE ---
         state: {
@@ -35,6 +39,19 @@ document.addEventListener('DOMContentLoaded', () => {
             // Stall watchdog: last observed playback position and when it froze.
             stallTime: null,
             stallSince: 0,
+        },
+        // Local ASR subtitle state (sidecar session + rendered text track).
+        subs: {
+            enabled: false,
+            baseUrl: '',
+            sessionId: null,
+            pollTimer: null,
+            statusTimer: null,
+            nextSeq: -1,
+            offset: 0,
+            track: null,
+            pollErrors: 0,
+            statusKey: null,
         },
         t: null,
         loadTimer: null,
@@ -61,6 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
             helpLabel: document.getElementById('help-label'),
             helpBody: document.getElementById('help-body'),
             attributionLink: document.getElementById('attribution-link'),
+            subsToggleBtn: document.getElementById('subs-toggle-btn'),
+            subsStatus: document.getElementById('subs-status'),
+            subsUrlInput: document.getElementById('subs-url-input'),
+            subsUrlLabel: document.getElementById('subs-url-label'),
+            subsHelp: document.getElementById('subs-help'),
         },
 
         // --- TRANSLATIONS ---
@@ -88,6 +110,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyInput: 'Please enter an Ace Stream link or content ID first.',
                 pressPlay: 'Ready. Press the play button to start watching.',
                 githubTitle: 'View project on GitHub (opens in a new tab)',
+                subsEnable: 'Enable subtitles',
+                subsDisable: 'Disable subtitles',
+                subsConnecting: 'Connecting to the subtitle server...',
+                subsTranscribing: 'Live English subtitles on (a few seconds behind).',
+                subsNoStream: 'Load a stream first, then enable subtitles.',
+                subsUnavailable: 'Cannot reach the subtitle server. Is subs/run.sh running?',
+                subsFailed: 'The subtitle session failed. Try enabling it again.',
+                subsUrlLabel: 'Subtitle server (local ASR)',
+                subsHelp: 'Press CC (top right) for live English subtitles from a local model.',
+                subsTrackLabel: 'English (ASR)',
             },
             'zh-CN': {
                 lang: 'zh-CN',
@@ -109,6 +141,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyInput: '请先输入 Ace Stream 链接或内容 ID。',
                 pressPlay: '已就绪。点击播放按钮开始观看。',
                 githubTitle: '在 GitHub 查看项目（在新标签页打开）',
+                subsEnable: '开启字幕',
+                subsDisable: '关闭字幕',
+                subsConnecting: '正在连接字幕服务…',
+                subsTranscribing: '实时英文字幕已开启（会滞后几秒）。',
+                subsNoStream: '请先播放一个流，再开启字幕。',
+                subsUnavailable: '无法连接字幕服务。subs/run.sh 是否在运行？',
+                subsFailed: '字幕会话失败，请重新开启试试。',
+                subsUrlLabel: '字幕服务（本地 ASR）',
+                subsHelp: '按右上角 CC 开启本地模型生成的实时英文字幕。',
+                subsTrackLabel: '英语（ASR）',
             },
             es: {
                 lang: 'es',
@@ -130,6 +172,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyInput: 'Introduce primero un enlace Ace Stream o un ID de contenido.',
                 pressPlay: 'Listo. Pulsa el botón de reproducción para empezar a ver.',
                 githubTitle: 'Ver proyecto en GitHub (se abre en una pestaña nueva)',
+                subsEnable: 'Activar subtítulos',
+                subsDisable: 'Desactivar subtítulos',
+                subsConnecting: 'Conectando con el servidor de subtítulos...',
+                subsTranscribing: 'Subtítulos en inglés en directo (unos segundos por detrás).',
+                subsNoStream: 'Carga un stream primero y luego activa los subtítulos.',
+                subsUnavailable: 'No se alcanza el servidor de subtítulos. ¿Está subs/run.sh en marcha?',
+                subsFailed: 'La sesión de subtítulos falló. Intenta activarla de nuevo.',
+                subsUrlLabel: 'Servidor de subtítulos (ASR local)',
+                subsHelp: 'Pulsa CC (arriba a la derecha) para subtítulos en inglés desde un modelo local.',
+                subsTrackLabel: 'Inglés (ASR)',
             }
         },
 
@@ -141,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.addEventListeners();
             this.startStallWatch();
             this.changeLanguage(this.detectLanguage());
+            this.initSubs();
 
             const deepLink = this.parseDeepLink();
             if (deepLink) {
@@ -215,9 +268,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (this.state.awaitingFirstPlay) {
                     this.state.awaitingFirstPlay = false;
                     this.togglePanel(false);
+                    this.maybeAutoEnableSubs();
                 }
             });
             this.elements.player.on('error', () => this.handleFailure());
+            this.elements.subsToggleBtn.addEventListener('click', () => this.toggleSubs());
+            this.elements.subsUrlInput.addEventListener('change', () => this.applySubsUrl());
         },
 
         // --- CORE LOGIC ---
@@ -243,6 +299,9 @@ document.addEventListener('DOMContentLoaded', () => {
             this.elements.linkInput.value = link;
             this.state.currentId = playerId;
             this.applyDocumentTitle();
+            // A new stream invalidates any previous subtitle session.
+            this.disableSubs();
+            this.elements.subsToggleBtn.disabled = false;
 
             // Bookmarkable/shareable URL for this stream.
             const shareUrl = `${location.pathname}?id=${playerId}`;
@@ -482,6 +541,217 @@ document.addEventListener('DOMContentLoaded', () => {
             this.elements.linkInput.removeAttribute('aria-describedby');
         },
 
+        // --- LOCAL ASR SUBTITLES ---
+        // The sidecar (subs/run.sh) transcribes the stream audio to English. The
+        // player opens a session, polls incremental cues and renders them on a
+        // native video.js text track so they survive fullscreen.
+        initSubs() {
+            const stored = localStorage.getItem(SUBS_URL_STORAGE_KEY);
+            this.subs.baseUrl = (stored || this.defaultSubsBase()).replace(/\/+$/, '');
+            this.elements.subsUrlInput.value = this.subs.baseUrl;
+            this.updateSubsToggleLabel();
+        },
+
+        defaultSubsBase() {
+            return `${location.protocol}//${location.hostname}:${this.SUBS_PORT}`;
+        },
+
+        resolveSubsBase() {
+            return this.subs.baseUrl || this.defaultSubsBase();
+        },
+
+        applySubsUrl() {
+            const val = this.elements.subsUrlInput.value.trim().replace(/\/+$/, '');
+            this.subs.baseUrl = val || this.defaultSubsBase();
+            this.elements.subsUrlInput.value = this.subs.baseUrl;
+            localStorage.setItem(SUBS_URL_STORAGE_KEY, this.subs.baseUrl);
+            if (this.subs.enabled) this.disableSubs();
+        },
+
+        toggleSubs() {
+            if (this.subs.enabled) this.disableSubs();
+            else this.enableSubs();
+        },
+
+        // Start subtitles together with playback when the sidecar is available.
+        // Probe /health first so a missing sidecar stays silent (CC remains off)
+        // instead of nagging on every play.
+        async maybeAutoEnableSubs() {
+            if (this.subs.enabled || !this.state.currentId) return;
+            try {
+                const res = await fetch(`${this.resolveSubsBase()}/health`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.ready) return;
+            } catch (e) {
+                return;
+            }
+            if (!this.subs.enabled) this.enableSubs();
+        },
+
+        async enableSubs() {
+            if (!this.state.currentId) {
+                this.showSubsStatus('subsNoStream', true);
+                return;
+            }
+            const base = this.resolveSubsBase();
+            this.subs.enabled = true;
+            this.subs.nextSeq = -1;
+            this.subs.pollErrors = 0;
+            // Anchor the sidecar's elapsed-time cues onto the player timeline.
+            this.subs.offset = this.elements.player.currentTime() || 0;
+            this.updateSubsToggleLabel();
+            this.ensureSubsTrack();
+            this.showSubsStatus('subsConnecting');
+            try {
+                // No engine field: the sidecar uses its own --engine (host-local
+                // 127.0.0.1:6878), which it can reach even when the page is opened
+                // via a LAN IP the container does not bind.
+                const res = await fetch(`${base}/session`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content_id: this.state.currentId }),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!this.subs.enabled) return;
+                this.subs.sessionId = data.session_id;
+                this.showSubsStatus('subsTranscribing');
+                this.scheduleSubsPoll();
+            } catch (err) {
+                console.error('Subtitle session error:', err);
+                this.subs.enabled = false;
+                this.updateSubsToggleLabel();
+                this.showSubsStatus('subsUnavailable', true);
+            }
+        },
+
+        disableSubs() {
+            const wasEnabled = this.subs.enabled;
+            this.subs.enabled = false;
+            if (this.subs.pollTimer) {
+                clearTimeout(this.subs.pollTimer);
+                this.subs.pollTimer = null;
+            }
+            const sid = this.subs.sessionId;
+            this.subs.sessionId = null;
+            if (sid) {
+                fetch(`${this.resolveSubsBase()}/session/${sid}/stop`, { method: 'POST' }).catch(() => {});
+            }
+            if (this.subs.track) {
+                this.subs.track.mode = 'disabled';
+                // Remove it so re-enabling creates a fresh track (no accumulation,
+                // and no stale reference after player.reset() tears the tech down).
+                const player = this.elements.player;
+                if (typeof player.removeRemoteTextTrack === 'function') {
+                    player.removeRemoteTextTrack(this.subs.track);
+                }
+                this.subs.track = null;
+            }
+            this.updateSubsToggleLabel();
+            if (wasEnabled) this.hideSubsStatus();
+        },
+
+        ensureSubsTrack() {
+            if (this.subs.track) {
+                const cues = this.subs.track.cues;
+                if (cues) {
+                    while (cues.length) this.subs.track.removeCue(cues[0]);
+                }
+                this.subs.track.mode = 'showing';
+                return;
+            }
+            const el = this.elements.player.addRemoteTextTrack({
+                kind: 'subtitles',
+                language: 'en',
+                srclang: 'en',
+                label: this.t.subsTrackLabel,
+            }, false);
+            // video.js may return the TextTrack directly or an HTMLTrackElement.
+            this.subs.track = el && el.track ? el.track : el;
+            if (this.subs.track) this.subs.track.mode = 'showing';
+        },
+
+        async pollSubs() {
+            this.subs.pollTimer = null;
+            if (!this.subs.enabled || !this.subs.sessionId) return;
+            const base = this.resolveSubsBase();
+            try {
+                const res = await fetch(`${base}/session/${this.subs.sessionId}/cues?after=${this.subs.nextSeq}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!this.subs.enabled) return;
+                this.subs.pollErrors = 0;
+                if (data.cues && data.cues.length) this.addSubsCues(data.cues);
+                if (typeof data.next === 'number') this.subs.nextSeq = data.next;
+                if (data.status === 'error') {
+                    this.showSubsStatus('subsFailed', true);
+                    this.disableSubs();
+                    return;
+                }
+                // 'stopped' means the sidecar's stream ended: keep the cues already
+                // on screen and stop polling.
+                if (data.status !== 'stopped') this.scheduleSubsPoll();
+            } catch (err) {
+                if (!this.subs.enabled) return;
+                this.subs.pollErrors++;
+                if (this.subs.pollErrors >= 3) {
+                    console.error('Subtitle poll error:', err);
+                    this.showSubsStatus('subsUnavailable', true);
+                    this.disableSubs();
+                    return;
+                }
+                this.scheduleSubsPoll();
+            }
+        },
+
+        scheduleSubsPoll() {
+            if (this.subs.pollTimer) clearTimeout(this.subs.pollTimer);
+            this.subs.pollTimer = setTimeout(() => this.pollSubs(), this.SUBS_POLL_MS);
+        },
+
+        addSubsCues(cues) {
+            const track = this.subs.track;
+            if (!track || typeof window.VTTCue !== 'function') return;
+            const offset = this.subs.offset;
+            cues.forEach((c) => {
+                const start = Math.max(0, c.start + offset);
+                const end = Math.max(start + 0.1, c.end + offset);
+                track.addCue(new window.VTTCue(start, end, c.text));
+            });
+        },
+
+        showSubsStatus(key, isError) {
+            if (this.subs.statusTimer) {
+                clearTimeout(this.subs.statusTimer);
+                this.subs.statusTimer = null;
+            }
+            this.subs.statusKey = key;
+            this.elements.subsStatus.innerText = this.t[key];
+            this.elements.subsStatus.classList.toggle('error', !!isError);
+            this.elements.subsStatus.classList.add('visible');
+            if (!isError) {
+                this.subs.statusTimer = setTimeout(() => this.hideSubsStatus(), 5000);
+            }
+        },
+
+        hideSubsStatus() {
+            if (this.subs.statusTimer) {
+                clearTimeout(this.subs.statusTimer);
+                this.subs.statusTimer = null;
+            }
+            this.subs.statusKey = null;
+            this.elements.subsStatus.classList.remove('visible', 'error');
+        },
+
+        updateSubsToggleLabel() {
+            if (!this.t) return;
+            const label = this.subs.enabled ? this.t.subsDisable : this.t.subsEnable;
+            this.elements.subsToggleBtn.setAttribute('aria-label', label);
+            this.elements.subsToggleBtn.setAttribute('title', label);
+            this.elements.subsToggleBtn.setAttribute('aria-pressed', String(this.subs.enabled));
+        },
+
         // Tab title follows the loaded stream, in the current language. Before a
         // stream is loaded the static <title> from player.html stands.
         applyDocumentTitle() {
@@ -511,6 +781,12 @@ document.addEventListener('DOMContentLoaded', () => {
             this.elements.loadingText.innerText = this.interpolate(t[this.state.loadingKey], this.state.loadingParams);
             this.elements.attributionLink.setAttribute('aria-label', t.githubTitle);
             this.elements.attributionLink.setAttribute('title', t.githubTitle);
+            this.elements.subsUrlLabel.innerText = t.subsUrlLabel;
+            this.elements.subsHelp.innerText = t.subsHelp;
+            this.updateSubsToggleLabel();
+            if (this.subs.statusKey && this.elements.subsStatus.classList.contains('visible')) {
+                this.elements.subsStatus.innerText = t[this.subs.statusKey];
+            }
 
             if (this.elements.player && typeof this.elements.player.language === 'function') {
                 this.elements.player.language(t.lang);

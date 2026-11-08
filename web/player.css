@@ -268,6 +268,102 @@ input:focus-visible {
     display: none;
 }
 
+/* Local ASR subtitle toggle, sits just below the panel show/hide button */
+#subs-toggle-btn {
+    position: absolute;
+    top: 76px;
+    right: 20px;
+    z-index: 101;
+    cursor: pointer;
+    background: rgba(30, 30, 30, 0.8);
+    border: none;
+    padding: 12px;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    transition: background 0.3s, color 0.3s;
+    color: var(--text-color);
+    line-height: 0;
+}
+
+#subs-toggle-btn:hover:not(:disabled) {
+    background: var(--surface-color);
+}
+
+#subs-toggle-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+#subs-toggle-btn[aria-pressed="true"] {
+    background: var(--primary-color);
+    color: #ffffff;
+}
+
+#subs-toggle-btn svg {
+    display: block;
+}
+
+/* Transient subtitle status bubble, clear of the 30px control bar */
+#subs-status {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 95;
+    max-width: 80%;
+    padding: 8px 16px;
+    border-radius: var(--border-radius);
+    background: rgba(30, 30, 30, 0.9);
+    color: var(--text-color);
+    font-size: 13px;
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+#subs-status.visible {
+    opacity: 1;
+}
+
+#subs-status.error {
+    background: rgba(120, 30, 30, 0.92);
+    color: #ffd5d5;
+}
+
+/* Subtitle server override in the input panel */
+#subs-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#subs-url-label {
+    font-size: 12.5px;
+    color: var(--text-muted-color);
+}
+
+#subs-url-input {
+    padding: 9px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: var(--border-radius);
+    background-color: #2a2a2a;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+#subs-url-input:focus {
+    border-color: var(--accent-bright);
+}
+
+#subs-help {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted-color);
+}
+
 /* Loading overlay shown while the stream connects/buffers */
 #loading-overlay {
     position: absolute;

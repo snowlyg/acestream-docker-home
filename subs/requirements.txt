@@ -1,0 +1,5 @@
+# Host-side ASR subtitle sidecar (runs natively, not in the acestream image).
+# A range (not an exact pin) is fine here: this is a separate host tool, not the
+# engine's cp310-only native modules. ctranslate2 ships wheels for CPython
+# 3.9-3.12; use one of those interpreters (run.sh picks one automatically).
+faster-whisper>=1.0.0,<2.0.0

@@ -12,9 +12,11 @@
         MediaSource via blob: URLs and a Worker created from a Blob.
     -->
     <!-- CSP: scripts only from this origin. style-src allows inline styles because
-         video.js sets them at runtime (dimensions, control state). -->
+         video.js sets them at runtime (dimensions, control state).
+         connect-src also allows http://*:8765 — the local ASR subtitle sidecar
+         (subs/run.sh). Only that port is opened, still no third-party domains. -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self' http://*:8765; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>Ace Link Player</title>
     <!-- Inline SVG favicon: self-contained, no external request -->
     <link rel="icon"
@@ -42,6 +44,16 @@
                     d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829l-2.83-2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12z" />
             </svg>
         </button>
+
+        <button id="subs-toggle-btn" type="button" aria-label="Enable subtitles" aria-pressed="false" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none"
+                stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <path d="M6 12h4M6 15h8M14 12h4" stroke-linecap="round" />
+            </svg>
+        </button>
+
+        <div id="subs-status" role="status" aria-live="polite"></div>
 
         <video id="video" class="video-js vjs-default-skin" controls preload="auto">
             <p class="vjs-no-js">
@@ -79,6 +91,12 @@
                     <span id="help-body">A link looks like <code>acestream://&lt;40 characters&gt;</code> and comes from
                         the channel list or community where you found the stream.</span>
                 </p>
+                <div id="subs-controls">
+                    <label for="subs-url-input" id="subs-url-label">Subtitle server (local ASR)</label>
+                    <input type="text" id="subs-url-input" autocomplete="off" autocapitalize="none"
+                        spellcheck="false" placeholder="http://localhost:8765" />
+                    <p id="subs-help">Press CC (top right) for live English subtitles from a local model.</p>
+                </div>
                 <div id="lang-controls">
                     <button class="lang-button active" type="button" data-lang="en" aria-label="English"
                         aria-pressed="true">

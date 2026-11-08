@@ -8,7 +8,11 @@
 
 Ejecuta Acestream Engine 3.2.11 dentro de Docker y mira streams desde el navegador. En Windows, un solo script lo hace todo: arranca Docker, descarga la imagen, lanza el motor y abre el reproductor web.
 
-## Novedades de v8.3.2
+## Novedades de v8.4.0
+
+- **Subtítulos en inglés en directo desde un modelo local**: un nuevo botón **CC** genera los subtítulos en tu propia máquina con faster-whisper, sin nube ni cuenta. Un sidecar nativo del host (`subs/run.sh`) transcribe el audio del stream y lo traduce al inglés, y el reproductor los muestra como una pista de subtítulos normal (funciona a pantalla completa). Va fuera del contenedor para mantenerse rápido en Apple Silicon. Los subtítulos van unos segundos por detrás de la imagen. Mira [subs/README.md](subs/README.md).
+
+### v8.3.2
 
 - **Reproductor en móviles**: el botón de mostrar/ocultar ya no tapa el panel, el botón grande de reproducción queda libre y todos los controles tienen un área táctil de 44 px.
 - **Reproductor en chino (简体中文)**: un tercer botón de bandera, textos `zh-CN` para todos los mensajes y controles de video.js en chino (el paquete de idioma también va incluido en la imagen, así que sigue sin usarse CDN). Se detecta cualquier idioma `zh*` del navegador y la elección explícita se sigue recordando.
@@ -58,6 +62,10 @@ Define la variable de entorno `ACESTREAM_IMAGE` para desplegar otra imagen (por 
 Pega un enlace `acestream://...` o el ID de contenido de 40 caracteres en el reproductor y pulsa **Reproducir**. Conectar con otros usuarios puede tardar entre 10 y 30 segundos.
 
 Los enlaces se pueden compartir o guardar en favoritos: `http://localhost:6878/webui/player/?id=<ID de contenido>`.
+
+### Subtítulos en directo (ASR local)
+
+Pulsa el botón **CC** (arriba a la derecha) para superponer subtítulos en inglés generados en tu máquina. Arranca primero el sidecar (`cd subs && ./run.sh`; necesita `ffmpeg` y Python 3.10-3.12) y activa CC mientras el stream se reproduce. Usa un modelo faster-whisper local: sin nube ni cuenta. Detalles y tamaños de modelo: [subs/README.md](subs/README.md).
 
 ### Desde otros dispositivos (tele, móvil, tablet)
 
@@ -115,6 +123,7 @@ O abre `http://<HOST>:<PUERTO>/webui/api/service?method=get_version`.
 - [docs/BUILD.md](docs/BUILD.md): cómo se construye la imagen, dependencias y restricciones de diseño
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): flujo de arranque y decisiones de diseño
 - [docs/TESTING.md](docs/TESTING.md): smoke tests y CI
+- [subs/README.md](subs/README.md): subtítulos en directo con ASR local (inglés)
 
 ## Licencia
 

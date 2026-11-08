@@ -22,6 +22,9 @@ desktop.ini
 __pycache__/
 *.pyc
 
+# Local ASR subtitle sidecar venv (subs/run.sh creates it)
+subs/.venv/
+
 # Logs
 *.log
 
