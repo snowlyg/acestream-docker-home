@@ -24,7 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // ~6 s segment), so riding the edge drains the buffer and stutters. Sitting
         // this far behind the edge means we consume segments the engine has already
         // cached (instant) while it keeps downloading ahead: latency for smoothness.
-        LIVE_CUSHION_SEC: 15,
+        // 25 s (not 15): the uplink sits at ~1 MB/s against an 8 Mbps stream, so the
+        // prefetch needs extra headroom to absorb swarm dips without stalling.
+        LIVE_CUSHION_SEC: 25,
         // Re-establish the cushion only when we have drifted back onto the edge.
         LIVE_CUSHION_MIN_SEC: 5,
         // Right after a (re)start the engine "catches up" and its edge advances
