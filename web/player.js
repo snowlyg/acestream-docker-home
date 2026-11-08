@@ -19,6 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Local ASR subtitle sidecar (subs/run.sh). The CSP only opens this port.
         SUBS_PORT: 8765,
         SUBS_POLL_MS: 1500,
+        // Live streams are fetched segment-by-segment at the live edge, and each
+        // segment's first byte waits on the P2P swarm (measured 1-6 s TTFB for a
+        // ~6 s segment), so riding the edge drains the buffer and stutters. Sitting
+        // this far behind the edge means we consume segments the engine has already
+        // cached (instant) while it keeps downloading ahead: latency for smoothness.
+        LIVE_CUSHION_SEC: 15,
 
         // --- STATE ---
         state: {
@@ -28,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastErrorParams: null,
             panelVisible: true,
             awaitingFirstPlay: false,
+            liveCushionApplied: false,
             failureHandled: false,
             retryCount: 0,
             // Which notice the reason was, so exhausting the backoff can repeat it
@@ -189,7 +196,19 @@ document.addEventListener('DOMContentLoaded', () => {
         init() {
             // `fill` (not `fluid`): the player already fills #player-container via
             // CSS, and fluid's padding-top would fight that and stretch the picture.
-            this.elements.player = videojs("video", { fill: true });
+            this.elements.player = videojs("video", {
+                fill: true,
+                html5: {
+                    vhs: {
+                        // Let the live cushion seek back inside the live window.
+                        allowSeeksWithinUnsafeLiveWindow: true,
+                        // A slow swarm segment is better waited out than aborted:
+                        // aborts (status 0) force a rewind + re-fetch of several
+                        // segments, which is what the visible stutter actually is.
+                        timeout: 20000,
+                    },
+                },
+            });
             this.addEventListeners();
             this.startStallWatch();
             this.changeLanguage(this.detectLanguage());
@@ -269,6 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.state.awaitingFirstPlay = false;
                     this.togglePanel(false);
                     this.maybeAutoEnableSubs();
+                    this.applyLiveCushion();
                 }
             });
             this.elements.player.on('error', () => this.handleFailure());
@@ -323,6 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // recover. This is what a manual page refresh used to be doing.
         startAttempt(playerId) {
             this.state.failureHandled = false;
+            this.state.liveCushionApplied = false;
             this.setLoadingMessage('loading');
             this.hidePressPlayHint();
             this.showLoading();
@@ -362,6 +383,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.handleFailure();
                 });
             }
+        },
+
+        // Pull playback back from the live edge once so we ride ~LIVE_CUSHION_SEC
+        // behind it. The segments behind the edge are already in the engine's cache
+        // (instant), and because the edge advances at the same rate we play, the
+        // cushion holds for the whole session: slow P2P first-bytes land in the
+        // prefetch buffer instead of stalling the picture.
+        applyLiveCushion() {
+            if (this.state.liveCushionApplied) return;
+            const player = this.elements.player;
+            if (player.duration() !== Infinity) return;   // VOD needs no cushion
+            const seekable = player.seekable();
+            if (!seekable || !seekable.length) return;
+            const start = seekable.start(0);
+            const end = seekable.end(seekable.length - 1);
+            const target = end - this.LIVE_CUSHION_SEC;
+            if (target <= start) return;                  // window too small to sit back
+            if (end - player.currentTime() >= this.LIVE_CUSHION_SEC) return;  // already back
+            this.state.liveCushionApplied = true;
+            player.currentTime(target);
         },
 
         // Single guarded failure path: the play() rejection and the video.js
