@@ -25,6 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // this far behind the edge means we consume segments the engine has already
         // cached (instant) while it keeps downloading ahead: latency for smoothness.
         LIVE_CUSHION_SEC: 15,
+        // Re-establish the cushion only when we have drifted back onto the edge.
+        LIVE_CUSHION_MIN_SEC: 5,
+        // Right after a (re)start the engine "catches up" and its edge advances
+        // faster than wall-clock, which makes VHS snap playback back to the edge;
+        // these bound the resulting backward jumps instead of fighting forever.
+        LIVE_CUSHION_COOLDOWN_MS: 20000,
+        LIVE_CUSHION_MAX_SEEKS: 3,
 
         // --- STATE ---
         state: {
@@ -34,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
             lastErrorParams: null,
             panelVisible: true,
             awaitingFirstPlay: false,
-            liveCushionApplied: false,
+            cushionSeeks: 0,
+            lastCushionSeekAt: 0,
             failureHandled: false,
             retryCount: 0,
             // Which notice the reason was, so exhausting the backoff can repeat it
@@ -292,6 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             this.elements.player.on('error', () => this.handleFailure());
+            // Sustain the live cushion: cheap no-op unless we drift onto the edge.
+            this.elements.player.on('timeupdate', () => this.applyLiveCushion());
             this.elements.subsToggleBtn.addEventListener('click', () => this.toggleSubs());
             this.elements.subsUrlInput.addEventListener('change', () => this.applySubsUrl());
         },
@@ -343,7 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // recover. This is what a manual page refresh used to be doing.
         startAttempt(playerId) {
             this.state.failureHandled = false;
-            this.state.liveCushionApplied = false;
+            this.state.cushionSeeks = 0;
+            this.state.lastCushionSeekAt = 0;
             this.setLoadingMessage('loading');
             this.hidePressPlayHint();
             this.showLoading();
@@ -385,23 +396,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        // Pull playback back from the live edge once so we ride ~LIVE_CUSHION_SEC
-        // behind it. The segments behind the edge are already in the engine's cache
-        // (instant), and because the edge advances at the same rate we play, the
-        // cushion holds for the whole session: slow P2P first-bytes land in the
-        // prefetch buffer instead of stalling the picture.
+        // Keep playback ~LIVE_CUSHION_SEC behind the live edge. The segments behind
+        // the edge are already in the engine's cache (instant first byte), so slow
+        // P2P fetches land in the prefetch buffer instead of stalling the picture.
+        // In steady state the edge advances ~1 s/s and the cushion holds by itself;
+        // right after a (re)start the engine catches up and VHS snaps us back to the
+        // edge, so re-establish it on a cooldown, bounded so we never jump forever.
         applyLiveCushion() {
-            if (this.state.liveCushionApplied) return;
             const player = this.elements.player;
-            if (player.duration() !== Infinity) return;   // VOD needs no cushion
+            const tracker = player.liveTracker;
+            const isLive = (tracker && tracker.isLive && tracker.isLive())
+                || !Number.isFinite(player.duration());
+            if (!isLive) return;                            // VOD needs no cushion
             const seekable = player.seekable();
             if (!seekable || !seekable.length) return;
             const start = seekable.start(0);
             const end = seekable.end(seekable.length - 1);
             const target = end - this.LIVE_CUSHION_SEC;
-            if (target <= start) return;                  // window too small to sit back
-            if (end - player.currentTime() >= this.LIVE_CUSHION_SEC) return;  // already back
-            this.state.liveCushionApplied = true;
+            if (target <= start) return;                    // window too small to sit back
+            if (end - player.currentTime() >= this.LIVE_CUSHION_MIN_SEC) return;  // already back
+            if (this.state.cushionSeeks >= this.LIVE_CUSHION_MAX_SEEKS) return;
+            const now = Date.now();
+            if (now - this.state.lastCushionSeekAt < this.LIVE_CUSHION_COOLDOWN_MS) return;
+            this.state.cushionSeeks++;
+            this.state.lastCushionSeekAt = now;
             player.currentTime(target);
         },
 
