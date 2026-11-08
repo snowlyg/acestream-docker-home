@@ -55,6 +55,10 @@ class Session:
 
     def stop(self):
         self.stop_event.set()
+        # _run only marks "stopped" on a natural EOF, so set it here too; the
+        # reuse check in POST /session treats "transcribing" as a live session
+        # and would otherwise hand out this dead session forever.
+        self.status = "stopped"
         # Unblock the worker's stdout.read() so shutdown is prompt.
         if self.proc and self.proc.poll() is None:
             try:
@@ -240,6 +244,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"error": "unknown session"})
                 return
             sess.stop()
+            with SESSIONS_LOCK:
+                SESSIONS.pop(parts[1], None)
             self._send(200, {"status": "stopping"})
             return
 
